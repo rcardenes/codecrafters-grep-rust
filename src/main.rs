@@ -1,10 +1,11 @@
+use anyhow::Result;
 use std::env;
 use std::io;
 use std::process;
 use grep_starter_rust::regex::RegexPattern;
 
 // Usage: echo <input_text> | your_grep.sh -E <pattern>
-fn main() {
+fn main() -> Result<()> {
     if env::args().nth(1).unwrap() != "-E" {
         println!("Expected first argument to be '-E'");
         process::exit(1);
@@ -16,7 +17,7 @@ fn main() {
     io::stdin().read_line(&mut input_line).unwrap();
     match RegexPattern::parse(&pattern) {
         Ok(pat) => {
-            if pat.is_contained_in(&input_line) {
+            if pat.is_contained_in(&input_line)? {
                 process::exit(0)
             } else {
                 process::exit(1)
@@ -27,5 +28,4 @@ fn main() {
             process::exit(1)
         }
     }
-
 }
