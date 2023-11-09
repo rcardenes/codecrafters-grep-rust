@@ -1,12 +1,31 @@
+use anyhow::{bail, Result};
 use std::env;
 use std::io;
 use std::process;
+use grep_starter_rust::regex::RegexPattern;
 
-fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
-        return input_line.contains(pattern);
+fn parse_pattern(pattern: &str) -> Result<RegexPattern> {
+    let mut stream = pattern.chars();
+    let res = match stream.next() {
+        Some('\\') => {
+            match stream.next() {
+                Some('d') => Ok(RegexPattern::Digit),
+                Some(chr) => Ok(RegexPattern::Char(chr)),
+                None => bail!("trailing backlash (\\)"),
+            }
+        }
+        Some(chr) => {
+            Ok(RegexPattern::Char(chr))
+        }
+        None => {
+            Ok(RegexPattern::Empty)
+        }
+    };
+
+    if stream.next().is_none() {
+        res
     } else {
-        panic!("Unhandled pattern: {}", pattern)
+        bail!("Unhandled pattern: {pattern}")
     }
 }
 
@@ -21,10 +40,18 @@ fn main() {
     let mut input_line = String::new();
 
     io::stdin().read_line(&mut input_line).unwrap();
-
-    if match_pattern(&input_line, &pattern) {
-        process::exit(0)
-    } else {
-        process::exit(1)
+    match parse_pattern(&pattern) {
+        Ok(pat) => {
+            if pat.is_contained_in(&input_line) {
+                process::exit(0)
+            } else {
+                process::exit(1)
+            }
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(1)
+        }
     }
+
 }
