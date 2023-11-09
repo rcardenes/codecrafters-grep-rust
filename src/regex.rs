@@ -4,7 +4,7 @@ pub enum RegexPattern {
     Char(char),
     AlphaNum,
     Digit,
-    CharGroup(Vec<char>),
+    CharGroup((Vec<char>, bool)),
     Empty,
 }
 
@@ -22,11 +22,15 @@ impl RegexPattern {
             }
             Some('[') => {
                 let mut set = vec![];
+                let mut pos: usize = 0;
+                let mut polarity = true;
                 while let Some(chr) = stream.next() {
                     match chr {
-                        ']' => return Ok(RegexPattern::CharGroup(set)),
+                        ']' => return Ok(RegexPattern::CharGroup((set, polarity))),
+                        '^' => if pos == 0 { polarity = false } else { set.push('^') }
                         _ => if !set.contains(&chr) { set.push(chr) }
                     }
+                    pos = pos + 1;
                 }
                 bail!("brackets ([ ]) not balanced")
             }
@@ -72,15 +76,15 @@ impl RegexPattern {
                 }
                 false
             }
-            RegexPattern::CharGroup(set) => {
+            RegexPattern::CharGroup((set, polarity)) => {
                 let mut chars = haystack.chars();
 
                 while let Some(chr) = chars.next() {
                     if set.contains(&chr) {
-                        return true
+                        return *polarity
                     }
                 }
-                false
+                !*polarity
             }
             RegexPattern::Empty => true
         }
