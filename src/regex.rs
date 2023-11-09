@@ -4,6 +4,7 @@ pub enum RegexPattern {
     Char(char),
     AlphaNum,
     Digit,
+    CharGroup(Vec<char>),
     Empty,
 }
 
@@ -18,6 +19,16 @@ impl RegexPattern {
                     Some(chr) => Ok(RegexPattern::Char(chr)),
                     None => bail!("trailing backlash (\\)"),
                 }
+            }
+            Some('[') => {
+                let mut set = vec![];
+                while let Some(chr) = stream.next() {
+                    match chr {
+                        ']' => return Ok(RegexPattern::CharGroup(set)),
+                        _ => if !set.contains(&chr) { set.push(chr) }
+                    }
+                }
+                bail!("brackets ([ ]) not balanced")
             }
             Some(chr) => {
                 Ok(RegexPattern::Char(chr))
@@ -57,6 +68,16 @@ impl RegexPattern {
                     match chr {
                         '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => return true,
                         _ => {}
+                    }
+                }
+                false
+            }
+            RegexPattern::CharGroup(set) => {
+                let mut chars = haystack.chars();
+
+                while let Some(chr) = chars.next() {
+                    if set.contains(&chr) {
+                        return true
                     }
                 }
                 false
