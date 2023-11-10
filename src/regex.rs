@@ -5,6 +5,7 @@ pub enum RegexClass {
     Char(char),
     AlphaNum,
     Digit,
+    Wildcard,
     CharGroup((Vec<char>, bool)),
     OneOrMore(Box<RegexClass>),
     Optional(Box<RegexClass>),
@@ -53,6 +54,9 @@ impl RegexClass {
                         _ => false
                     })
                 )
+            }
+            RegexClass::Wildcard => {
+                simple_match!(haystack.chars().next().is_some_and(|c| c != '\n'))
             }
             RegexClass::CharGroup((set, polarity)) => {
                 simple_match!(
@@ -174,9 +178,8 @@ impl RegexPattern {
                         bail!("repetition-operator operand invalid")
                     }
                 }
-                _ => {
-                    seq.push(RegexClass::Char(chr))
-                }
+                '.' => seq.push(RegexClass::Wildcard),
+                _ => seq.push(RegexClass::Char(chr)),
             }
         };
 
