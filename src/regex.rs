@@ -1,12 +1,24 @@
 use anyhow::{bail, Result};
 
+#[derive(Debug)]
 pub enum RegexClass {
     Char(char),
     AlphaNum,
     Digit,
     CharGroup((Vec<char>, bool)),
     OneOrMore(Box<RegexClass>),
+    Optional(Box<RegexClass>),
     Sequence(Vec<RegexClass>),
+}
+
+macro_rules! simple_match {
+    ($expression:expr) => {
+        if $expression {
+            (true, 1)
+        } else {
+            (false, 0)
+        }
+    };
 }
 
 impl RegexClass {
@@ -15,6 +27,8 @@ impl RegexClass {
             RegexClass::Sequence(seq) => {
                 seq.iter().fold(0, |acc, item| { acc + item.min_size() } )
             }
+            RegexClass::Optional(..) => 0,
+            RegexClass::OneOrMore(pat) => pat.min_size(),
             _ => 1,
         }
     }
@@ -22,29 +36,32 @@ impl RegexClass {
     fn matches(&self, haystack: &str) -> (bool, usize) {
         match self {
             RegexClass::Char(pat) => {
-                (haystack.chars().next().is_some_and(|c| c == *pat), 1)
+                simple_match!(haystack.chars().next().is_some_and(|c| c == *pat))
             }
             RegexClass::Digit => {
-                let mt = haystack.chars().next().is_some_and(|c| match c {
-                    '0'..='9' => true,
-                    _ => false
-                });
-                (mt, 1)
+                simple_match!(
+                    haystack.chars().next().is_some_and(|c| match c {
+                        '0'..='9' => true,
+                        _ => false
+                    })
+                )
             }
             RegexClass::AlphaNum => {
-                let mt = haystack.chars().next().is_some_and(|c| match c {
-                    '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => true,
-                    _ => false
-                });
-                (mt, 1)
+                simple_match!(
+                    haystack.chars().next().is_some_and(|c| match c {
+                        '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => true,
+                        _ => false
+                    })
+                )
             }
             RegexClass::CharGroup((set, polarity)) => {
-                let mt = haystack.chars().next().is_some_and(|c| if set.contains(&c) {
-                    *polarity
-                } else {
-                    !*polarity
-                });
-                (mt, 1)
+                simple_match!(
+                    haystack.chars().next().is_some_and(|c| if set.contains(&c) {
+                        *polarity
+                    } else {
+                        !*polarity
+                    })
+                )
             }
             RegexClass::OneOrMore(pat) => {
                 let mut consumed = 0usize;
@@ -59,6 +76,9 @@ impl RegexClass {
                 }
 
                 (consumed > 0, consumed)
+            }
+            RegexClass::Optional(pat) => {
+                (true, pat.matches(haystack).1)
             }
             RegexClass::Sequence(seq) => {
                 let mut consumed = 0usize;
@@ -143,6 +163,13 @@ impl RegexPattern {
                 '+' => {
                     if let Some(pat) = seq.pop() {
                         seq.push(RegexClass::OneOrMore(Box::new(pat)))
+                    } else {
+                        bail!("repetition-operator operand invalid")
+                    }
+                }
+                '?' => {
+                    if let Some(pat) = seq.pop() {
+                        seq.push(RegexClass::Optional(Box::new(pat)))
                     } else {
                         bail!("repetition-operator operand invalid")
                     }
