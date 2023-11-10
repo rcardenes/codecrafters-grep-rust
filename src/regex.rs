@@ -5,6 +5,7 @@ pub enum RegexClass {
     AlphaNum,
     Digit,
     CharGroup((Vec<char>, bool)),
+    OneOrMore(Box<RegexClass>),
     Sequence(Vec<RegexClass>),
 }
 
@@ -19,32 +20,45 @@ impl RegexClass {
     }
 
     fn matches(&self, haystack: &str) -> (bool, usize) {
-        let mut it = haystack.chars();
         match self {
             RegexClass::Char(pat) => {
-                (it.next().is_some_and(|c| c == *pat), 1)
+                (haystack.chars().next().is_some_and(|c| c == *pat), 1)
             }
             RegexClass::Digit => {
-                let mt = it.next().is_some_and(|c| match c {
+                let mt = haystack.chars().next().is_some_and(|c| match c {
                     '0'..='9' => true,
                     _ => false
                 });
                 (mt, 1)
             }
             RegexClass::AlphaNum => {
-                let mt = it.next().is_some_and(|c| match c {
+                let mt = haystack.chars().next().is_some_and(|c| match c {
                     '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => true,
                     _ => false
                 });
                 (mt, 1)
             }
             RegexClass::CharGroup((set, polarity)) => {
-                let mt = it.next().is_some_and(|c| if set.contains(&c) {
+                let mt = haystack.chars().next().is_some_and(|c| if set.contains(&c) {
                     *polarity
                 } else {
                     !*polarity
                 });
                 (mt, 1)
+            }
+            RegexClass::OneOrMore(pat) => {
+                let mut consumed = 0usize;
+
+                loop {
+                    let (matches, length) = pat.matches(&haystack[consumed..]);
+                    if !matches {
+                        break
+                    } else {
+                        consumed += length
+                    }
+                }
+
+                (consumed > 0, consumed)
             }
             RegexClass::Sequence(seq) => {
                 let mut consumed = 0usize;
@@ -124,6 +138,13 @@ impl RegexPattern {
                     }
                     if !closed {
                         bail!("brackets ([ ]) not balanced")
+                    }
+                }
+                '+' => {
+                    if let Some(pat) = seq.pop() {
+                        seq.push(RegexClass::OneOrMore(Box::new(pat)))
+                    } else {
+                        bail!("repetition-operator operand invalid")
                     }
                 }
                 _ => {
