@@ -64,21 +64,36 @@ impl RegexClass {
     }
 }
 
+fn len_no_newline(text: &str) -> usize {
+    let mut index = text.len();
+    while text[..index].ends_with('\n') {
+        index -= 1
+    }
+    index
+}
+
 pub struct RegexPattern {
     at_start: bool,
+    until_end: bool,
     sequence: RegexClass,
 }
 
 impl RegexPattern {
     pub fn parse(pattern: &str) -> Result<Self> {
         let mut at_start = false;
+        let mut until_end = false;
         let mut seq = vec![];
-        let mut stream = pattern.chars();
 
-        if pattern.starts_with('^') {
-            stream.next();
+        let pattern = if pattern.starts_with('^') {
             at_start = true;
-        }
+            &pattern[1..]
+        } else { pattern };
+        let pattern = if pattern.ends_with('$') {
+            until_end = true;
+            &pattern[..pattern.len()-1]
+        } else { pattern };
+
+        let mut stream = pattern.chars();
 
         while let Some(chr) = stream.next() {
             match chr {
@@ -119,24 +134,35 @@ impl RegexPattern {
 
         Ok(RegexPattern {
             at_start,
+            until_end,
             sequence: RegexClass::Sequence(seq)
         })
     }
 
     pub fn is_contained_in(&self, haystack: &str) -> Result<bool> {
+        let hlen = len_no_newline(haystack);
         let min_size = self.sequence.min_size();
-        if min_size > haystack.len() {
+        if min_size > hlen {
             return Ok(false)
         }
 
         match &self.sequence {
             RegexClass::Sequence(..) => {
                 if self.at_start {
-                    return Ok(self.sequence.matches(haystack).0)
+                    let (matches, length) = self.sequence.matches(haystack);
+                    if self.until_end {
+                        return Ok(matches && (length == hlen))
+                    } else {
+                        return Ok(matches)
+                    }
                 }
 
-                for offset in 0..=(haystack.len() - min_size) {
-                    if self.sequence.matches(&haystack[(offset)..]).0 {
+                for offset in 0..=(hlen - min_size) {
+                    let (matches, length) = self.sequence.matches(&haystack[(offset)..]);
+                    if matches {
+                        if self.until_end && length != (hlen - offset) {
+                            continue
+                        }
                         return Ok(true)
                     }
                 }
